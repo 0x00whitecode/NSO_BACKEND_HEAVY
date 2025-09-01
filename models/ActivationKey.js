@@ -2,15 +2,14 @@ const mongoose = require('mongoose');
 const crypto = require('crypto');
 
 const activationKeySchema = new mongoose.Schema({
-  // Key Information
+  // Key Information - 12-digit numeric key
   key: {
     type: String,
     required: [true, 'Activation key is required'],
     unique: true,
     trim: true,
-    uppercase: true,
-    // 12-character activation key in XXXX-XXXX-XXXX format
-    match: [/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/i, 'Invalid activation key format']
+    // 12-digit numeric key
+    match: [/^\d{12}$/, 'Invalid activation key format - must be 12 digits']
   },
   keyHash: {
     type: String,
@@ -18,28 +17,37 @@ const activationKeySchema = new mongoose.Schema({
     unique: true
   },
 
-  // Assignment Information
-  assignedTo: {
-    userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      default: null
-    },
-    email: {
-      type: String,
-      trim: true,
-      lowercase: true,
-      match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
-    },
+  // Encrypted user data for offline validation
+  encryptedUserData: {
+    type: String,
+    required: [true, 'Encrypted user data is required']
+  },
+
+  // User details for admin management (plain text)
+  userDetails: {
     fullName: {
       type: String,
+      required: [true, 'Full name is required'],
       trim: true,
       maxlength: [100, 'Full name cannot exceed 100 characters']
     },
+    email: {
+      type: String,
+      required: [true, 'Email is required'],
+      trim: true,
+      lowercase: true,
+      match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Invalid email format']
+    },
+    phone: {
+      type: String,
+      trim: true,
+      maxlength: [20, 'Phone number cannot exceed 20 characters']
+    },
     role: {
       type: String,
+      required: [true, 'Role is required'],
       enum: ['doctor', 'nurse', 'admin', 'technician', 'inspector', 'supervisor'],
-      required: [true, 'Role is required']
+      trim: true
     },
     facility: {
       type: String,
@@ -56,98 +64,22 @@ const activationKeySchema = new mongoose.Schema({
   // Status and Lifecycle
   status: {
     type: String,
-    enum: ['pending', 'active', 'used', 'expired', 'revoked', 'suspended'],
-    default: 'pending'
-  },
-  
-  // Activation Information
-  activatedAt: {
-    type: Date,
-    default: null
-  },
-  activatedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    default: null
-  },
-  deviceId: {
-    type: String,
-    trim: true,
-    default: null
-  },
-  deviceInfo: {
-    platform: {
-      type: String,
-      enum: ['ios', 'android', 'web']
-    },
-    model: {
-      type: String,
-      trim: true,
-      maxlength: [50, 'Model cannot exceed 50 characters']
-    },
-    osVersion: {
-      type: String,
-      trim: true,
-      maxlength: [20, 'OS version cannot exceed 20 characters']
-    },
-    appVersion: {
-      type: String,
-      trim: true,
-      maxlength: [20, 'App version cannot exceed 20 characters']
-    }
+    enum: ['unused', 'used', 'expired', 'revoked'],
+    default: 'unused'
   },
 
-  // Validity and Expiration
-  validFrom: {
+  // Timestamps
+  createdAt: {
     type: Date,
     default: Date.now
   },
-  validUntil: {
+  expiresAt: {
     type: Date,
-    required: [true, 'Expiration date is required'],
-    validate: {
-      validator: function(value) {
-        return value > this.validFrom;
-      },
-      message: 'Expiration date must be after valid from date'
-    }
+    required: [true, 'Expiration date is required']
   },
-  maxUses: {
-    type: Number,
-    default: 1,
-    min: [1, 'Max uses must be at least 1']
-  },
-  usageCount: {
-    type: Number,
-    default: 0,
-    min: [0, 'Usage count cannot be negative']
-  },
-
-  // Security and Restrictions
-  ipRestrictions: [{
-    type: String,
-    trim: true,
-    match: [/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?:\/[0-9]{1,2})?$/, 'Invalid IP address format']
-  }],
-  locationRestrictions: {
-    allowedStates: [{
-      type: String,
-      trim: true,
-      maxlength: [50, 'State name cannot exceed 50 characters']
-    }],
-    allowedFacilities: [{
-      type: String,
-      trim: true,
-      maxlength: [100, 'Facility name cannot exceed 100 characters']
-    }],
-    maxDistance: {
-      type: Number,
-      min: [0, 'Max distance cannot be negative']
-    }, // in kilometers
-    centerPoint: {
-      latitude: Number,
-      longitude: Number
-    }
+  usedAt: {
+    type: Date,
+    default: null
   },
 
   // Administrative Information
@@ -156,17 +88,15 @@ const activationKeySchema = new mongoose.Schema({
     ref: 'User',
     required: [true, 'Creator is required']
   },
-  approvedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    default: null
+
+  // Notes (optional)
+  notes: {
+    type: String,
+    trim: true,
+    maxlength: [500, 'Notes cannot exceed 500 characters']
   },
-  approvedAt: {
-    type: Date,
-    default: null
-  },
-  
-  // Revocation Information
+
+  // Revocation Information (for revoked keys)
   revokedAt: {
     type: Date,
     default: null
@@ -180,71 +110,13 @@ const activationKeySchema = new mongoose.Schema({
     type: String,
     trim: true,
     maxlength: [200, 'Revocation reason cannot exceed 200 characters']
-  },
-
-  // Usage Tracking
-  usageHistory: [{
-    timestamp: {
-      type: Date,
-      default: Date.now
-    },
-    action: {
-      type: String,
-      enum: ['created', 'activated', 'used', 'revoked', 'expired', 'suspended'],
-      required: true
-    },
-    userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    deviceId: {
-      type: String,
-      trim: true
-    },
-    ipAddress: {
-      type: String,
-      trim: true
-    },
-    location: {
-      latitude: Number,
-      longitude: Number,
-      address: {
-        type: String,
-        trim: true,
-        maxlength: [200, 'Address cannot exceed 200 characters']
-      }
-    },
-    metadata: {
-      type: mongoose.Schema.Types.Mixed,
-      default: {}
-    }
-  }],
-
-  // Metadata
-  metadata: {
-    type: mongoose.Schema.Types.Mixed,
-    default: {}
-  },
-  notes: {
-    type: String,
-    trim: true,
-    maxlength: [500, 'Notes cannot exceed 500 characters']
-  },
-
-  // Timestamps
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
   }
 }, {
-  timestamps: true,
+  timestamps: true, // Automatically adds createdAt and updatedAt
   toJSON: {
     transform: function(doc, ret) {
       delete ret.keyHash;
+      delete ret.encryptedUserData; // Don't expose encrypted data in JSON
       delete ret.__v;
       return ret;
     }
@@ -254,84 +126,82 @@ const activationKeySchema = new mongoose.Schema({
 // Indexes for performance
 activationKeySchema.index({ key: 1 });
 activationKeySchema.index({ keyHash: 1 });
-activationKeySchema.index({ status: 1, validUntil: 1 });
-activationKeySchema.index({ 'assignedTo.userId': 1 });
-activationKeySchema.index({ 'assignedTo.email': 1 });
+activationKeySchema.index({ status: 1, expiresAt: 1 });
+activationKeySchema.index({ 'userDetails.email': 1 });
 activationKeySchema.index({ createdBy: 1, createdAt: -1 });
-activationKeySchema.index({ deviceId: 1 });
-activationKeySchema.index({ validFrom: 1, validUntil: 1 });
 
 // Compound indexes
 activationKeySchema.index({ status: 1, createdAt: -1 });
-activationKeySchema.index({ 'assignedTo.role': 1, status: 1 });
+activationKeySchema.index({ 'userDetails.role': 1, status: 1 });
 
 // Virtual for checking if key is expired
 activationKeySchema.virtual('isExpired').get(function() {
-  return this.validUntil < new Date();
+  return this.expiresAt < new Date();
 });
 
 // Virtual for checking if key is valid
 activationKeySchema.virtual('isValid').get(function() {
   const now = new Date();
-  return this.status === 'active' && 
-         this.validFrom <= now && 
-         this.validUntil > now && 
-         this.usageCount < this.maxUses;
+  return this.status === 'unused' && this.expiresAt > now;
 });
 
-// Pre-save middleware to generate key hash
+// Pre-save middleware to generate key hash and handle expiration
 activationKeySchema.pre('save', function(next) {
   if (this.isModified('key')) {
     this.keyHash = crypto.createHash('sha256').update(this.key).digest('hex');
   }
-  this.updatedAt = Date.now();
+
+  // Auto-expire keys that are past expiration date
+  if (this.expiresAt < new Date() && this.status === 'unused') {
+    this.status = 'expired';
+  }
+
   next();
 });
 
-// Static method to generate a new activation key
+// Static method to generate a new 12-digit activation key
 activationKeySchema.statics.generateKey = function() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  // Generate 12 random digits
   let key = '';
-
-  for (let i = 0; i < 3; i++) {
-    if (i > 0) key += '-';
-    for (let j = 0; j < 4; j++) {
-      key += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
+  for (let i = 0; i < 12; i++) {
+    key += Math.floor(Math.random() * 10).toString();
   }
-
   return key;
+};
+
+// Static method to generate encrypted user data for offline validation
+activationKeySchema.statics.encryptUserData = function(userData, key) {
+  const ENCRYPTION_KEY = process.env.ACTIVATION_KEY_SECRET || 'nso-activation-key-2024';
+  const cipher = crypto.createCipher('aes-256-cbc', ENCRYPTION_KEY + key);
+  let encrypted = cipher.update(JSON.stringify(userData), 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  return encrypted;
 };
 
 // Static method to find by key
 activationKeySchema.statics.findByKey = function(key) {
-  const keyHash = crypto.createHash('sha256').update(key.toUpperCase()).digest('hex');
+  const keyHash = crypto.createHash('sha256').update(key).digest('hex');
   return this.findOne({ keyHash });
 };
 
-// Instance method to add usage history
-activationKeySchema.methods.addUsageHistory = function(action, userId, deviceId, ipAddress, location, metadata = {}) {
-  this.usageHistory.push({
-    action,
-    userId,
-    deviceId,
-    ipAddress,
-    location,
-    metadata
-  });
-  return this.save();
+// Static method to decrypt user data for validation
+activationKeySchema.statics.decryptUserData = function(encryptedData, key) {
+  try {
+    const ENCRYPTION_KEY = process.env.ACTIVATION_KEY_SECRET || 'nso-activation-key-2024';
+    const decipher = crypto.createDecipher('aes-256-cbc', ENCRYPTION_KEY + key);
+    let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return JSON.parse(decrypted);
+  } catch (error) {
+    return null;
+  }
 };
 
-// Instance method to activate key
-activationKeySchema.methods.activate = function(userId, deviceId, deviceInfo, ipAddress, location) {
+// Instance method to use/activate key
+activationKeySchema.methods.use = function() {
   this.status = 'used';
-  this.activatedAt = new Date();
-  this.activatedBy = userId;
-  this.deviceId = deviceId;
-  this.deviceInfo = deviceInfo;
-  this.usageCount += 1;
-  
-  return this.addUsageHistory('activated', userId, deviceId, ipAddress, location);
+  this.usedAt = new Date();
+  return this.save();
 };
 
 // Instance method to revoke key
@@ -340,23 +210,19 @@ activationKeySchema.methods.revoke = function(revokedBy, reason) {
   this.revokedAt = new Date();
   this.revokedBy = revokedBy;
   this.revocationReason = reason;
-  
-  return this.addUsageHistory('revoked', revokedBy, null, null, null, { reason });
+  return this.save();
 };
 
-// Instance method to check if key can be activated
-activationKeySchema.methods.canActivate = function() {
+// Instance method to check if key can be used
+activationKeySchema.methods.canUse = function() {
   const now = new Date();
-  return this.status === 'active' && 
-         this.validFrom <= now && 
-         this.validUntil > now && 
-         this.usageCount < this.maxUses;
+  return this.status === 'unused' && this.expiresAt > now;
 };
 
 // Instance method to get remaining days
 activationKeySchema.methods.getRemainingDays = function() {
   const now = new Date();
-  const diffTime = this.validUntil - now;
+  const diffTime = this.expiresAt - now;
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   return Math.max(0, diffDays);
 };

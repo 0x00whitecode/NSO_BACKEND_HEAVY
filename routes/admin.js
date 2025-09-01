@@ -694,87 +694,48 @@ router.get('/activation-keys', validatePagination, async (req, res) => {
 
 /**
  * POST /api/v1/admin/activation-keys
- * Create new activation key
+ * Create new 12-digit activation key
  */
-router.post('/activation-keys', validateActivationKeyCreation, async (req, res) => {
+router.post('/activation-keys', async (req, res) => {
   try {
     const {
-      assignedTo,
-      validUntil,
-      maxUses = 1,
-      notes,
-      locationRestrictions
+      userDetails,
+      expiresAt,
+      notes
     } = req.body;
 
-    // Import the offline key generation utility
-    const { generateActivationKey } = require('../scripts/generate-offline-keys');
-
-    // Generate offline activation key with encrypted user data
-    const keyData = {
-      userId: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      fullName: assignedTo.fullName,
-      role: assignedTo.role,
-      facility: assignedTo.facility,
-      state: assignedTo.state,
-      contactInfo: assignedTo.email,
-      validUntil: new Date(validUntil),
-      maxUses,
-      usageCount: 0,
-      status: 'active',
-      createdAt: new Date(),
-      assignedBy: req.user.email || 'admin@nso.gov.ng'
-    };
-
-    const offlineKey = generateActivationKey(keyData);
-    
-    if (!offlineKey) {
-      return res.status(500).json({
+    // Validate required fields
+    if (!userDetails || !userDetails.fullName || !userDetails.email || !userDetails.role) {
+      return res.status(400).json({
         success: false,
-        error: 'Failed to generate offline activation key',
-        code: 'OFFLINE_KEY_GENERATION_FAILED'
+        error: 'User details (fullName, email, role) are required',
+        code: 'MISSING_USER_DETAILS'
       });
     }
 
-    const key = offlineKey.key;
+    // Import the new activation key service
+    const activationKeyService = require('../services/activationKeyService');
 
-    const activationKey = new ActivationKey({
-      key,
-      keyHash: crypto.createHash('sha256').update(key).digest('hex'), // Explicitly set keyHash
-      assignedTo,
-      validUntil: new Date(validUntil),
-      maxUses,
+    // Generate new 12-digit activation key
+    const result = await activationKeyService.generateKey(userDetails, {
+      expiresAt: expiresAt ? new Date(expiresAt) : undefined,
       notes,
-      locationRestrictions,
-      createdBy: req.user._id,
-      status: 'active'
+      createdBy: req.user._id
     });
 
-    await activationKey.save();
-
-    // Add creation to usage history
-    await activationKey.addUsageHistory(
-      'created',
-      req.user._id,
-      null,
-      req.ip,
-      null,
-      { notes }
-    );
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        error: result.error,
+        code: 'KEY_GENERATION_FAILED'
+      });
+    }
 
     res.status(201).json({
       success: true,
-      message: 'Offline activation key created successfully',
+      message: '12-digit activation key created successfully',
       data: {
-        activationKey: {
-          id: activationKey._id,
-          key: activationKey.key,
-          assignedTo: activationKey.assignedTo,
-          validUntil: activationKey.validUntil,
-          status: activationKey.status,
-          createdAt: activationKey.createdAt,
-          isOfflineKey: true,
-          encryptedData: offlineKey.encryptedData
-        }
+        activationKey: result.data
       }
     });
 
@@ -784,6 +745,97 @@ router.post('/activation-keys', validateActivationKeyCreation, async (req, res) 
       success: false,
       error: 'Failed to create activation key',
       code: 'CREATE_ACTIVATION_KEY_ERROR'
+    });
+  }
+});
+
+/**
+ * GET /api/v1/admin/activation-keys
+ * Get all activation keys with filtering and pagination
+ */
+router.get('/activation-keys', async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 20,
+      status,
+      role,
+      email,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    const activationKeyService = require('../services/activationKeyService');
+
+    const result = await activationKeyService.getKeys(
+      { status, role, email, createdBy: req.user._id },
+      { page: parseInt(page), limit: parseInt(limit), sortBy, sortOrder }
+    );
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        error: result.error,
+        code: 'GET_KEYS_FAILED'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Activation keys retrieved successfully',
+      data: result.data
+    });
+
+  } catch (error) {
+    console.error('Get activation keys error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve activation keys',
+      code: 'GET_ACTIVATION_KEYS_ERROR'
+    });
+  }
+});
+
+/**
+ * POST /api/v1/admin/activation-keys/:key/revoke
+ * Revoke an activation key
+ */
+router.post('/activation-keys/:key/revoke', async (req, res) => {
+  try {
+    const { key } = req.params;
+    const { reason } = req.body;
+
+    if (!reason) {
+      return res.status(400).json({
+        success: false,
+        error: 'Revocation reason is required',
+        code: 'MISSING_REASON'
+      });
+    }
+
+    const activationKeyService = require('../services/activationKeyService');
+
+    const result = await activationKeyService.revokeKey(key, req.user._id, reason);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error,
+        code: result.code || 'REVOKE_FAILED'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Activation key revoked successfully'
+    });
+
+  } catch (error) {
+    console.error('Revoke activation key error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to revoke activation key',
+      code: 'REVOKE_ACTIVATION_KEY_ERROR'
     });
   }
 });
