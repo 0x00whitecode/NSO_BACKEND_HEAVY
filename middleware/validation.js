@@ -29,7 +29,7 @@ const validateActivation = [
   body('activationKey')
     .notEmpty()
     .withMessage('Activation key is required')
-    .matches(/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/)
+    .matches(/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/)
     .withMessage('Invalid activation key format'),
   
   body('userInfo.fullName')
@@ -77,7 +77,7 @@ const validateLogin = [
   body('activationKey')
     .notEmpty()
     .withMessage('Activation key is required')
-    .matches(/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/)
+    .matches(/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/)
     .withMessage('Invalid activation key format'),
   
   body('deviceId')

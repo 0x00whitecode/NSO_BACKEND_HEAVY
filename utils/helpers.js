@@ -246,19 +246,19 @@ const formatBytes = (bytes, decimals = 2) => {
 
 /**
  * Generate activation key in NSO format
- * @returns {string} Activation key in XXXX-XXXX-XXXX-XXXX format
+ * @returns {string} Activation key in XXXX-XXXX-XXXX format (12 characters)
  */
 const generateActivationKey = () => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let key = '';
-  
-  for (let i = 0; i < 4; i++) {
+
+  for (let i = 0; i < 3; i++) {
     if (i > 0) key += '-';
     for (let j = 0; j < 4; j++) {
       key += chars.charAt(Math.floor(Math.random() * chars.length));
     }
   }
-  
+
   return key;
 };
 
@@ -268,7 +268,7 @@ const generateActivationKey = () => {
  * @returns {boolean} True if valid format
  */
 const isValidActivationKey = (key) => {
-  const keyRegex = /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
+  const keyRegex = /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
   return keyRegex.test(key);
 };
 

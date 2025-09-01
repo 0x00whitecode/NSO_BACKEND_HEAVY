@@ -109,29 +109,24 @@ function generateKeyPrefix() {
 }
 
 /**
- * Generate activation key with encrypted user data
+ * Generate simple 12-character activation key
  */
 function generateActivationKey(userData) {
   try {
-    // Encrypt the user data
-    const encryptedData = encryptData(userData);
-    if (!encryptedData) {
-      throw new Error('Failed to encrypt user data');
+    // Generate a simple 12-character key (3 groups of 4 characters)
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let key = '';
+
+    for (let i = 0; i < 12; i++) {
+      key += chars.charAt(Math.floor(Math.random() * chars.length));
     }
 
-    // Generate a random key prefix (16 characters)
-    const keyPrefix = generateKeyPrefix();
-    
-    // Combine prefix and encrypted data
-    const fullKey = keyPrefix + encryptedData;
-    
-    // Format the key with dashes for readability
-    const formattedKey = fullKey.replace(/(.{4})/g, '$1-').replace(/-$/, '');
-    
+    // Format as XXXX-XXXX-XXXX
+    const formattedKey = key.replace(/(.{4})/g, '$1-').replace(/-$/, '');
+
     return {
       key: formattedKey,
-      rawKey: fullKey,
-      encryptedData: encryptedData,
+      rawKey: key,
       userData: userData
     };
   } catch (error) {

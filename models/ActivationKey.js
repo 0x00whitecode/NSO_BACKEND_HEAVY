@@ -9,8 +9,8 @@ const activationKeySchema = new mongoose.Schema({
     unique: true,
     trim: true,
     uppercase: true,
-    // Allow offline-encrypted keys with 4 or more 4-char groups (e.g., AAAA-BBBB-CCCC-DDDD-EEEE-...)
-    match: [/^(?:[A-Z0-9]{4}-){3,}[A-Z0-9]{4}$/, 'Invalid activation key format']
+    // 12-character activation key in XXXX-XXXX-XXXX format
+    match: [/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/i, 'Invalid activation key format']
   },
   keyHash: {
     type: String,
@@ -292,14 +292,14 @@ activationKeySchema.pre('save', function(next) {
 activationKeySchema.statics.generateKey = function() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let key = '';
-  
-  for (let i = 0; i < 4; i++) {
+
+  for (let i = 0; i < 3; i++) {
     if (i > 0) key += '-';
     for (let j = 0; j < 4; j++) {
       key += chars.charAt(Math.floor(Math.random() * chars.length));
     }
   }
-  
+
   return key;
 };
 
