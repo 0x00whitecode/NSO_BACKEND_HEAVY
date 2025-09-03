@@ -26,12 +26,20 @@ const PORT = config.PORT;
 
 // Basic security middleware
 app.use(helmet());
+
+// Ultra-permissive CORS for admin and mobile clients
 app.use(cors({
   origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-device-id', 'x-session-id', 'x-admin-access', 'x-admin-token'],
-  credentials: false
+  methods: '*',
+  allowedHeaders: '*',
+  exposedHeaders: '*',
+  credentials: false,
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
+// Ensure preflight requests are handled for all routes
+app.options('*', cors());
+
 app.use(compression());
 
 // Request logging
