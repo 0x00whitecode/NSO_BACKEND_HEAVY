@@ -29,17 +29,20 @@ router.use(logRequest);
  */
 router.post('/activate', validateActivation, async (req, res) => {
   try {
-    const { 
-      activationKey, 
-      userInfo = {}, 
-      deviceId, 
+    const {
+      activationKey,
+      userInfo = {},
+      deviceId,
       deviceInfo,
       location,
       sessionId
     } = req.body;
 
+    // Normalize key: support 12-digit or dashed formats
+    const normalizedKey = String(activationKey).replace(/\D/g, '');
+
     // Find activation key
-    const keyDoc = await ActivationKey.findByKey(activationKey);
+    const keyDoc = await ActivationKey.findByKey(normalizedKey);
     if (!keyDoc) {
       return res.status(400).json({
         success: false,
@@ -89,7 +92,7 @@ router.post('/activate', validateActivation, async (req, res) => {
       state: userInfo.state || keyDoc.assignedTo.state,
       contactInfo: userInfo.contactInfo,
       deviceId,
-      activationKey: activationKey,
+      activationKey: normalizedKey,
       isActive: true,
       isVerified: true,
       lastLogin: new Date()
@@ -208,11 +211,14 @@ router.post('/login', validateLogin, async (req, res) => {
   try {
     const { activationKey, deviceId, location, sessionId } = req.body;
 
+    // Normalize key
+    const normalizedKey = String(activationKey).replace(/\D/g, '');
+
     // Find user by activation key
-    const user = await User.findOne({ 
-      activationKey: activationKey.toUpperCase(),
+    const user = await User.findOne({
+      activationKey: normalizedKey,
       deviceId,
-      isActive: true 
+      isActive: true
     });
 
     if (!user) {
