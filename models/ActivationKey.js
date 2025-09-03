@@ -144,6 +144,14 @@ activationKeySchema.virtual('isValid').get(function() {
   const now = new Date();
   return this.status === 'unused' && this.expiresAt > now;
 });
+// Ensure keyHash is present before validation
+activationKeySchema.pre('validate', function(next) {
+  if ((this.isModified('key') || this.isNew) && this.key) {
+    this.keyHash = crypto.createHash('sha256').update(this.key).digest('hex');
+  }
+  next();
+});
+
 
 // Pre-save middleware to generate key hash and handle expiration
 activationKeySchema.pre('save', function(next) {
