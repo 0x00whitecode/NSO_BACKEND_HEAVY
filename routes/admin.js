@@ -628,68 +628,9 @@ router.delete('/users/:userId', validateObjectId('userId'), async (req, res) => 
  * GET /api/v1/admin/activation-keys
  * Get activation keys with pagination and filtering
  */
-router.get('/activation-keys', validatePagination, async (req, res) => {
-  try {
-    const {
-      page = 1,
-      limit = 20,
-      status,
-      search,
-      sortBy = 'createdAt',
-      sortOrder = 'desc'
-    } = req.query;
-
-    // Build query
-    const query = {};
-    
-    if (status) query.status = status;
-    if (search) {
-      query.$or = [
-        { 'assignedTo.email': { $regex: search, $options: 'i' } },
-        { 'assignedTo.fullName': { $regex: search, $options: 'i' } },
-        { 'assignedTo.facility': { $regex: search, $options: 'i' } }
-      ];
-    }
-
-    // Build sort object
-    const sort = {};
-    sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
-
-    // Execute query with pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const keys = await ActivationKey.find(query)
-      .populate('createdBy', 'firstName lastName email')
-      .populate('assignedTo.userId', 'firstName lastName email')
-      .populate('activatedBy', 'firstName lastName email')
-      .sort(sort)
-      .skip(skip)
-      .limit(parseInt(limit))
-      .lean();
-
-    // Get total count for pagination
-    const total = await ActivationKey.countDocuments(query);
-
-    res.json({
-      success: true,
-      data: {
-        activationKeys: keys,
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total,
-          pages: Math.ceil(total / parseInt(limit))
-        }
-      }
-    });
-
-  } catch (error) {
-    console.error('Get admin activation keys error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to retrieve activation keys',
-      code: 'GET_ADMIN_ACTIVATION_KEYS_ERROR'
-    });
-  }
+router.get('/activation-keys', validatePagination, (req, res, next) => {
+  // Delegate to the service-based implementation defined later for consistency
+  return next();
 });
 
 /**
