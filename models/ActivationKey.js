@@ -171,11 +171,16 @@ activationKeySchema.statics.generateKey = function() {
 
 // Static method to generate encrypted user data for offline validation
 activationKeySchema.statics.encryptUserData = function(userData, key) {
-  const ENCRYPTION_KEY = process.env.ACTIVATION_KEY_SECRET || 'nso-activation-key-2024';
-  const cipher = crypto.createCipher('aes-256-cbc', ENCRYPTION_KEY + key);
-  let encrypted = cipher.update(JSON.stringify(userData), 'utf8', 'hex');
+  // Derive 32-byte key from secret to match mobile app's decryption
+  const SECRET = process.env.ACTIVATION_KEY_SECRET || 'nso-activation-key-2024';
+  const derivedKey = Buffer.from(SECRET.padEnd(32, '0').slice(0, 32), 'utf8');
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv('aes-256-cbc', derivedKey, iv);
+  const json = JSON.stringify(userData);
+  let encrypted = cipher.update(json, 'utf8', 'hex');
   encrypted += cipher.final('hex');
-  return encrypted;
+  // Prefix IV (hex) to the encrypted payload to align with mobile
+  return iv.toString('hex') + encrypted;
 };
 
 // Static method to find by key
@@ -187,9 +192,14 @@ activationKeySchema.statics.findByKey = function(key) {
 // Static method to decrypt user data for validation
 activationKeySchema.statics.decryptUserData = function(encryptedData, key) {
   try {
-    const ENCRYPTION_KEY = process.env.ACTIVATION_KEY_SECRET || 'nso-activation-key-2024';
-    const decipher = crypto.createDecipher('aes-256-cbc', ENCRYPTION_KEY + key);
-    let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
+    const SECRET = process.env.ACTIVATION_KEY_SECRET || 'nso-activation-key-2024';
+    const derivedKey = Buffer.from(SECRET.padEnd(32, '0').slice(0, 32), 'utf8');
+    // Extract IV (first 32 hex chars -> 16 bytes)
+    const ivHex = encryptedData.slice(0, 32);
+    const payloadHex = encryptedData.slice(32);
+    const iv = Buffer.from(ivHex, 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-cbc', derivedKey, iv);
+    let decrypted = decipher.update(payloadHex, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
     return JSON.parse(decrypted);
   } catch (error) {
