@@ -58,7 +58,7 @@ router.post('/activate', validateActivation, async (req, res) => {
       else if (keyDoc.status === 'expired') reason = 'Expired';
       else if (keyDoc.status === 'revoked') reason = 'Revoked';
       else if (keyDoc.isExpired) reason = 'Expired';
-      else if (keyDoc.usageCount >= keyDoc.maxUses) reason = 'Usage limit exceeded';
+
 
       return res.status(400).json({
         success: false,
@@ -72,7 +72,7 @@ router.post('/activate', validateActivation, async (req, res) => {
     const existingUserByDevice = await User.findOne({ deviceId });
     if (existingUserByDevice) {
       // If the device is already tied to a pre-created user with the same email, treat this as activation of that account
-      if (existingUserByDevice.email?.toLowerCase() !== keyDoc.assignedTo.email?.toLowerCase()) {
+      if (existingUserByDevice.email?.toLowerCase() !== keyDoc.userDetails.email?.toLowerCase()) {
         return res.status(400).json({
           success: false,
           error: 'Device already registered',
@@ -82,29 +82,34 @@ router.post('/activate', validateActivation, async (req, res) => {
     }
 
     // Prepare core user fields (from key assignment, with optional overrides)
+    const assigned = keyDoc.userDetails || {};
+    const fullName = userInfo.fullName || assigned.fullName || '';
+    const firstName = fullName.split(' ')[0] || assigned.fullName?.split(' ')[0] || 'User';
+    const lastName = fullName.split(' ').slice(1).join(' ') || firstName;
+
     const baseUserFields = {
-      email: keyDoc.assignedTo.email,
-      firstName: (userInfo.fullName || keyDoc.assignedTo.fullName).split(' ')[0],
-      lastName: (userInfo.fullName || keyDoc.assignedTo.fullName).split(' ').slice(1).join(' ') ||
-                (userInfo.fullName || keyDoc.assignedTo.fullName).split(' ')[0],
-      role: keyDoc.assignedTo.role,
-      facility: userInfo.facility || keyDoc.assignedTo.facility,
-      state: userInfo.state || keyDoc.assignedTo.state,
+      email: assigned.email,
+      firstName,
+      lastName,
+      role: assigned.role,
+      facility: userInfo.facility || assigned.facility,
+      state: userInfo.state || assigned.state,
       contactInfo: userInfo.contactInfo,
       deviceId,
       activationKey: normalizedKey,
+      activationKeyExpires: keyDoc.expiresAt,
       isActive: true,
       isVerified: true,
       lastLogin: new Date()
     };
 
     // Add license number for roles that require it
-    if (keyDoc.assignedTo.role === 'doctor' || keyDoc.assignedTo.role === 'nurse') {
+    if (assigned.role === 'doctor' || assigned.role === 'nurse') {
       baseUserFields.licenseNumber = userInfo.licenseNumber || `LIC-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
     }
 
     // If a user with this email already exists (e.g., pre-created by admin), update that user instead of creating a new one
-    let user = await User.findOne({ email: keyDoc.assignedTo.email.toLowerCase() });
+    let user = await User.findOne({ email: (assigned.email || '').toLowerCase() });
 
     if (user) {
       // If an existing user was found by device with same email, we will just update it
@@ -127,7 +132,7 @@ router.post('/activate', validateActivation, async (req, res) => {
       // Create new user account
       const userData = {
         username: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        email: keyDoc.assignedTo.email.toLowerCase(),
+        email: (assigned.email || '').toLowerCase(),
         password: crypto.randomBytes(32).toString('hex'), // Random password
         ...baseUserFields
       };
@@ -135,14 +140,12 @@ router.post('/activate', validateActivation, async (req, res) => {
       await user.save();
     }
 
-    // Activate the key
-    await keyDoc.activate(
-      user._id, 
-      deviceId, 
-      deviceInfo, 
-      req.ip, 
-      location
-    );
+    // Mark key as used (online activation)
+    try {
+      await keyDoc.use();
+    } catch (e) {
+      console.warn('Failed to mark key as used:', e);
+    }
 
     // Generate tokens
     const token = generateToken(user);
@@ -166,7 +169,7 @@ router.post('/activate', validateActivation, async (req, res) => {
     await activity.save();
 
     // Calculate remaining days
-    const remainingDays = Math.ceil((keyDoc.validUntil - new Date()) / (1000 * 60 * 60 * 24));
+    const remainingDays = Math.ceil((keyDoc.expiresAt - new Date()) / (1000 * 60 * 60 * 24));
 
     res.status(201).json({
       success: true,
@@ -188,7 +191,7 @@ router.post('/activate', validateActivation, async (req, res) => {
         token,
         refreshToken,
         expiresIn: '24h',
-        keyExpiresAt: keyDoc.validUntil,
+        keyExpiresAt: keyDoc.expiresAt,
         remainingDays: Math.max(0, remainingDays)
       }
     });

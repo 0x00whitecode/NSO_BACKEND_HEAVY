@@ -29,8 +29,8 @@ const validateActivation = [
   body('activationKey')
     .notEmpty()
     .withMessage('Activation key is required')
-    .matches(/^(?:\d{12}|[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})$/)
-    .withMessage('Invalid activation key format'),
+    .matches(/^\d{12}$/)
+    .withMessage('Invalid activation key format - must be 12 digits'),
   
   body('userInfo.fullName')
     .optional()
@@ -77,8 +77,8 @@ const validateLogin = [
   body('activationKey')
     .notEmpty()
     .withMessage('Activation key is required')
-    .matches(/^(?:\d{12}|[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})$/)
-    .withMessage('Invalid activation key format'),
+    .matches(/^\d{12}$/)
+    .withMessage('Invalid activation key format - must be 12 digits'),
   
   body('deviceId')
     .notEmpty()
