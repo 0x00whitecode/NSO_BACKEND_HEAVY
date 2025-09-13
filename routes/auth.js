@@ -38,8 +38,26 @@ router.post('/activate', validateActivation, async (req, res) => {
       sessionId
     } = req.body;
 
+    console.log('[DEBUG AUTH] Activation request received:', {
+      activationKey: activationKey,
+      activationKeyType: typeof activationKey,
+      deviceId,
+      userInfo
+    });
+
+    // Validate activation key parameter
+    if (!activationKey || (typeof activationKey !== 'string' && typeof activationKey !== 'number')) {
+      console.error('[DEBUG AUTH] Invalid activation key parameter:', activationKey);
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid activation key parameter',
+        code: 'INVALID_ACTIVATION_KEY_PARAM'
+      });
+    }
+
     // Normalize key: support 12-digit or dashed formats
     const normalizedKey = String(activationKey).replace(/\D/g, '');
+    console.log('[DEBUG AUTH] Normalized key:', normalizedKey);
 
     // Find activation key
     const keyDoc = await ActivationKey.findByKey(normalizedKey);
