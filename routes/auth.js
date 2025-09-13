@@ -108,6 +108,11 @@ router.post('/activate', validateActivation, async (req, res) => {
       baseUserFields.licenseNumber = userInfo.licenseNumber || `LIC-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
     }
 
+    // Add license number for roles that require it
+    if (assigned.role === 'doctor' || assigned.role === 'nurse') {
+      baseUserFields.licenseNumber = userInfo.licenseNumber || `LIC-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+    }
+
     // If a user with this email already exists (e.g., pre-created by admin), update that user instead of creating a new one
     let user = await User.findOne({ email: (assigned.email || '').toLowerCase() });
 
